@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "adxl345.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,7 +56,13 @@ static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM14_Init(void);
 /* USER CODE BEGIN PFP */
-
+#define I2C_ADR 0xA6 // adxl 345 alternate adres/sdo low (0x53+rw dus 0xA6/7)
+unsigned char adxl_read_byte(unsigned char);
+void adxl_read_n_bytes(unsigned char, unsigned char, unsigned char* );
+void adxl_write_byte(unsigned char, unsigned char);
+void adxl_init();
+void blink (int num);
+void allesuit();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -110,8 +116,7 @@ int main(void)
   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN */
 
    unsigned char data=0x00;
-   HAL_I2C_Master_Transmit(&hi2c1, 0xA6, &data,1,1000); /* transmit to ADXL345/343 the register adress to be read (0x00=device ID)*/
-   HAL_I2C_Master_Receive(&hi2c1, 0xA6, &data, 1, 1000); /* read the register */
+   data = adxl_read_byte(ADXL345_DEVID);
 
    if(data == 0b11100101) /* If ADXL345/343 device ID succesfully read, green on. Else red. */
    {
@@ -126,11 +131,14 @@ int main(void)
 	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,0); 		/* RED */
    }
 
-   HAL_Delay(10000);
+   HAL_Delay(5000);
 
    __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN */
    __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,10000); 	/* BLUE */
    __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,10000); 	/* RED */
+
+   adxl_init();
+   blink(2);
 
   /* USER CODE END 2 */
 
@@ -138,27 +146,47 @@ int main(void)
   /* USER CODE BEGIN WHILE */
    while (1)
   {
-	  for(int i = 0; i<10000; i+=5)
-	  {
-		  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,i); /* blue- */
-		  HAL_Delay(1);
-	  }
-	  for(int i = 0; i<10000; i+=5)
-	  {
-		  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,i); /* RED- */
-		  HAL_Delay(1);
-	  }
-	  for(int i = 0; i<10000; i+=5)
-	  {
-		  __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,i); /* green- */
-		  HAL_Delay(1);
-	  }
+	   unsigned char buffer[6], intjes;
+	   int x,y,z;
+	   enum modes{direct, catchchange, freefall, blinkcolorwheel, fadecolorwheel, pureRGB} mode;
 
-	  /* USER CODE END WHILE */
+	   intjes = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
+	   // reading resets them, so only read once a cycle
 
-	  /* USER CODE BEGIN 3 */
+
+		adxl_read_n_bytes(0x32, 6, buffer); // read xyz in one go
+		x=buffer[0]|(buffer[1]<<8);
+		y=buffer[2]|(buffer[3]<<8);
+		z=buffer[4]|(buffer[5]<<8);
+
+		// because it is 2's complement, if bit 9 is set then bits 31 to 9 should also be set (To convert from 10 bit signed int to 32 bit signed int)
+		if(x&1<<9) x|=0xFFFFFC00;
+		if(y&1<<9) y|=0xFFFFFC00;
+		if(z&1<<9) z|=0xFFFFFC00;
+
+		//scale XYZ to SETPOINT as max
+		float g,r,b;
+		g=10000-(x*10000/(1<<8)); // adxl is 10 bit, signed.
+		r=10000-(y*10000/(1<<8));
+		b=10000-(z*10000/(1<<8));
+
+		if(g>10000) g=10000; // crowbar (force safe value)
+		if(r>10000) r=10000; // crowbar (force safe value)
+		if(b>10000) b=10000; // crowbar (force safe value)
+		if(g<0) g=0; // crowbar (force safe value / discard if below zero)
+		if(r<0) r=0; // crowbar (force safe value / discard if below zero)
+		if(b<0) b=0; // crowbar (force safe value / discard if below zero)
+
+	   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,g); /* GREEN */
+	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,b); 	/* BLUE */
+	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,r); 	/* RED */
+	   /* TODO: think of PWM range and frequency / set max value / maybe add a helper function to set a collor easily? */
+
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
   }
-   /* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**
@@ -378,6 +406,77 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+unsigned char adxl_read_byte(unsigned char addr) {
+	unsigned char data;
+	HAL_I2C_Master_Transmit(&hi2c1, 0xA6, &addr,1,1000); /* transmit to ADXL345/343 the register adress to be read */
+	HAL_I2C_Master_Receive(&hi2c1, 0xA6, &data, 1, 1000); /* read the register */
+	return data;
+}
+
+void adxl_read_n_bytes(unsigned char addr, unsigned char n, unsigned char* buff) {
+	HAL_I2C_Master_Transmit(&hi2c1, 0xA6, &addr,1,1000); /* transmit to ADXL345/343 the first register adress to be read */
+	HAL_I2C_Master_Receive(&hi2c1, 0xA6, buff, n, 1000); /* read the register(s) */
+}
+
+void adxl_write_byte(unsigned char addr, unsigned char data) {
+	unsigned char buffer[2] = {addr,data};
+	HAL_I2C_Master_Transmit(&hi2c1, 0xA6, buffer,2,1000); /* transmit to ADXL345/343  */
+}
+
+void adxl_init()
+{
+/*
+Datasheet excerpt:
+"
+Therefore, some experimentation with values for the
+DUR, latent, window, and THRESH_TAP registers is required.
+In general, a good starting point is to set the DUR register to a
+value greater than 0x10 (10 ms), the latent register to a value greater
+than 0x10 (20 ms), the window register to a value greater than
+0x40 (80 ms), and the THRESH_TAP register to a value greater
+than 0x30 (3 g).
+"
+*/
+
+// Determine treshhold values in actual application (Maybe even at runtime? Meh, no. just calibrate them once. Manually)
+	adxl_write_byte(ADXL345_THRESH_TAP, 0x2D); // 62.5mg per increment
+	adxl_write_byte(ADXL345_DUR, 0x10);	  // 625us per increment
+	adxl_write_byte(ADXL345_LATENT, 0x80);
+
+//tuned these thressholds so it does not wake up during transport but wakes easily when needed
+	adxl_write_byte(ADXL345_THRESH_INACT, 20); //20 is OK  <<-- Below this, it goes to sleep
+	adxl_write_byte(ADXL345_THRESH_ACT, 120);   //was 20, now 120 <<-- above this, it wakes (So set higher, so it does not wake in transport)
+
+	adxl_write_byte(ADXL345_TIME_INACT, 30); // seconds (30, 2 for test)
+	adxl_write_byte(ADXL345_ACT_INACT_CTL, 0xFF); // look for activity/inactivity on all axes, AC coupled
+	adxl_write_byte(ADXL345_THRESH_FF, 0x06); // Freefall thresshold. Reccomended between 0x05 and 0x09 (300/600m g)
+	adxl_write_byte(ADXL345_TIME_FF, 0x14); //100ms (0x14 - 0x46) 350ms recommended.
+	adxl_write_byte(ADXL345_TAP_AXES, 0x07); // detect taps on all axes.
+	adxl_write_byte(ADXL345_BW_RATE, 0x1A); // Low power 100Hz (50uA active, lower yet in sleep).
+	adxl_write_byte(ADXL345_POWER_CTL,0x08); // 8Hz in sleep, be active now, do not link inactivity/activity, do not autosleep on inactivity
+	adxl_write_byte(ADXL345_INT_ENABLE,0x5C);// enable single tap, activity, inactivity & freefall interrupts
+	adxl_write_byte(ADXL345_INT_MAP,0x10); // Only activity to INT2 pin
+}
+
+void blink (int num){
+ allesuit();
+ HAL_Delay(200);
+
+while(num--){
+ __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 0); /* GREEN ON */
+ HAL_Delay(100);
+ __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN OFF */
+ HAL_Delay(200);
+ }
+
+}
+
+void allesuit()
+{
+   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN */
+   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,10000); 	/* BLUE */
+   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,10000); 	/* RED */
+}
 
 /* USER CODE END 4 */
 
