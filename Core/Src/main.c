@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "adxl345.h"
+#include "config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,7 +63,8 @@ void adxl_read_n_bytes(unsigned char, unsigned char, unsigned char* );
 void adxl_write_byte(unsigned char, unsigned char);
 void adxl_init();
 void blink (int num);
-void allesuit();
+void go_sleep();
+void setcolor_rgb(unsigned int, unsigned int, unsigned int);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -109,36 +111,36 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_2); /* RED*/
   HAL_TIM_PWM_Start(&htim14,TIM_CHANNEL_1); /* GREEN */
 
-  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,10000); /* BLUE */
-  __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,0); /* RED */
-
-
-  __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN */
+  	  /* Flash R,G,B to verify color order is correct */
+	setcolor_rgb(PWM_MAX,0,0);
+	HAL_Delay(200);
+	setcolor_rgb(0,PWM_MAX,0);
+	HAL_Delay(200);
+	setcolor_rgb(0,0,PWM_MAX);
+	HAL_Delay(200);
+	setcolor_rgb(0,0,0);
+	HAL_Delay(1000);
 
    unsigned char data=0x00;
    data = adxl_read_byte(ADXL345_DEVID);
 
    if(data == 0b11100101) /* If ADXL345/343 device ID succesfully read, green on. Else red. */
    {
-	   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 0); /* GREEN */
-	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,10000); /* BLUE */
-	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,10000); /* RED */
+	   setcolor_rgb(0,PWM_MAX,0);
    }
    else
    {
-	   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN */
-	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,10000); 	/* BLUE */
-	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,0); 		/* RED */
+	   setcolor_rgb(PWM_MAX,0,0);
    }
 
    HAL_Delay(5000);
 
-   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN */
-   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,10000); 	/* BLUE */
-   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,10000); 	/* RED */
+   setcolor_rgb(0,0,0);
 
    adxl_init();
    blink(2);
+
+   //go_sleep(); /* Start by sleeping, so lights are not blinding during assembly TODO:first configure wake-up interrupts... */
 
   /* USER CODE END 2 */
 
@@ -166,13 +168,13 @@ int main(void)
 
 		//scale XYZ to SETPOINT as max
 		float g,r,b;
-		g=10000-(x*10000/(1<<8)); // adxl is 10 bit, signed.
-		r=10000-(y*10000/(1<<8));
-		b=10000-(z*10000/(1<<8));
+		g=x*PWM_MAX/(1<<8); // adxl is 10 bit, signed.
+		r=y*PWM_MAX/(1<<8);
+		b=z*PWM_MAX/(1<<8);
 
-		if(g>10000) g=10000; // crowbar (force safe value)
-		if(r>10000) r=10000; // crowbar (force safe value)
-		if(b>10000) b=10000; // crowbar (force safe value)
+		if(g>PWM_MAX) g=PWM_MAX; // crowbar (force safe value)
+		if(r>PWM_MAX) r=PWM_MAX; // crowbar (force safe value)
+		if(b>PWM_MAX) b=PWM_MAX; // crowbar (force safe value)
 		if(g<0) g=0; // crowbar (force safe value / discard if below zero)
 		if(r<0) r=0; // crowbar (force safe value / discard if below zero)
 		if(b<0) b=0; // crowbar (force safe value / discard if below zero)
@@ -180,9 +182,10 @@ int main(void)
 	   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,g); /* GREEN */
 	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,b); 	/* BLUE */
 	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,r); 	/* RED */
-	   /* TODO: think of PWM range and frequency / set max value / maybe add a helper function to set a collor easily? */
 
-    /* USER CODE END WHILE */
+	   /* Todo: use HAL_GetTick() to get a milisecond timer tick for all time-related things from original code. That ran at 55kHz, so modify for 1kHz*/
+
+	   /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
@@ -295,9 +298,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = 8;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 10000;
+  htim3.Init.Period = 4096;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
@@ -312,7 +315,7 @@ static void MX_TIM3_Init(void)
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM2;
   sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
@@ -347,9 +350,9 @@ static void MX_TIM14_Init(void)
 
   /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
-  htim14.Init.Prescaler = 0;
+  htim14.Init.Prescaler = 8;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim14.Init.Period = 10000;
+  htim14.Init.Period = 4096;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
@@ -362,7 +365,7 @@ static void MX_TIM14_Init(void)
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM2;
   sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim14, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
@@ -402,6 +405,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(NSHDN_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_1_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_1_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
 
 }
 
@@ -459,23 +469,46 @@ than 0x30 (3 g).
 }
 
 void blink (int num){
- allesuit();
+ setcolor_rgb(0,0,0);
  HAL_Delay(200);
 
 while(num--){
- __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 0); /* GREEN ON */
+ setcolor_rgb(0,PWM_MAX,0);
  HAL_Delay(100);
- __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN OFF */
+ setcolor_rgb(0,0,0);
  HAL_Delay(200);
  }
 
 }
 
-void allesuit()
+
+void setcolor_rgb(unsigned int red, unsigned int green, unsigned int blue)
 {
-   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1, 10000); /* GREEN */
-   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,10000); 	/* BLUE */
-   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,10000); 	/* RED */
+   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,green);
+   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,blue);
+   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,red);
+}
+
+void go_sleep()
+{
+	/* Use HAL_PWR_EnterSLEEPMode(regulator,PWR_SLEEPENTRY_WFI) to go to sleep. */
+	/* Disable tick interrupt first if not wanting to wake-up on tick */
+	/* re-enable after wake-up.  */
+	HAL_SuspendTick(); /* Stop systick before going to sleep, so it does not wake every 1 ms */
+
+	adxl_read_byte(ADXL345_INT_SOURCE); // read interrupts (and clear them) from adxl
+ 	// because if it detects activity now, it's too soon to react too an thus will never be reacted too.
+
+	adxl_write_byte(ADXL345_POWER_CTL,0x0C); // put ADXL to sleep at 8 Hz sample rate.
+	// lower sample rates do not save more power, so let's update at 8Hz.
+
+	HAL_PWR_EnterSLEEPMode(0,PWR_SLEEPENTRY_WFI);
+	HAL_ResumeTick();
+
+	adxl_write_byte(ADXL345_POWER_CTL,0x00); // wake ADXL -> standbye
+	adxl_write_byte(ADXL345_POWER_CTL,0x08); // standbye -> measure (For lower noise)
+	adxl_read_byte(ADXL345_INT_SOURCE); // read interrupts (and clear them) from adxl, so MCU does not get sent back to sleep again by inactivity.
+
 }
 
 /* USER CODE END 4 */

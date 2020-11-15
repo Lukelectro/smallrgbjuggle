@@ -62,10 +62,12 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define INPUT_Pin GPIO_PIN_0
 #define INPUT_GPIO_Port GPIOA
+#define INPUT_EXTI_IRQn EXTI0_1_IRQn
 #define NSHDN_Pin GPIO_PIN_2
 #define NSHDN_GPIO_Port GPIOA
 #define INT2_Pin GPIO_PIN_5
 #define INT2_GPIO_Port GPIOA
+#define INT2_EXTI_IRQn EXTI4_15_IRQn
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

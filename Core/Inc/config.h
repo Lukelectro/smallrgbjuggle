@@ -3,6 +3,8 @@
 
 /* TODO: modify / complete for smallrgbjuggle */
 
+#define PWM_MAX 4096
+
 #define LEN_COLOR 33
 const int colorset_percentage[LEN_COLOR] = //r,g,b
 {
