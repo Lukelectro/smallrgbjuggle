@@ -136,7 +136,13 @@ int main(void)
 	   setcolor_rgb(PWM_MAX,0,0);
    }
 
-   HAL_Delay(5000);
+   HAL_Delay(2500);
+
+	//setup array of nice collors
+	int colors[LEN_COLOR];
+	for(int i = 0;i<LEN_COLOR;i++){
+	colors[i]=colorset_percentage[i]*PWM_MAX/100;
+	}
 
    setcolor_rgb(0,0,0);
 
@@ -145,17 +151,18 @@ int main(void)
 
    //go_sleep(); /* Start by sleeping, so lights are not blinding during assembly TODO:first configure wake-up interrupts... */
 
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
    while (1)
   {
-	   unsigned char buffer[6], intjes;
-	   int x,y,z, tap;
-	   uint32_t prevtaptick, prevfftick; // timestamps for tap and freefall
+	   static unsigned char buffer[6], intjes, rgb;
+	   static int x,y,z, tap, cc=0;
+	   static uint32_t prevtaptick=0, prevfftick=0; // timestamps for tap and freefall
 	   static bool Juggle=false, Catch=false, Flying=false; // Juggle in progress? Just catched?
-	   enum modes{direct, catchchange, freefall, blinkcolorwheel, fadecolorwheel, pureRGB} mode;
+	   static enum modes{direct, catchchange, freefall, blinkcolorwheel, fadecolorwheel, pureRGB} mode;
 
 	   intjes = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
 	   // reading resets them, so only read once a cycle
@@ -166,18 +173,19 @@ int main(void)
 			tap++;
 		}
 
-		if( HAL_GetTick() > (uint32_t)(prevtaptick+1000) ){ /* assuming tick at 1 Khz, 1 second */
-			tap=0;
-		}
-		else if(tap>2){ // TRIPLE tap. 3 and up > 2 :)
+		if(tap>2)
+		{ // TRIPLE tap. 3 and up > 2 :)
 			tap=0; // reset counter
 			mode++; // resets due to default case, so no fuss here.
 			setcolor_rgb(0,0,0);
-			blink(mode);
+			blink(mode+1); /* +1 because 0 indexed */
+		}
+		else if( (HAL_GetTick() - 1000) > prevtaptick )
+		{ /* assuming tick at 1 Khz, 1 second */
+			tap=0;
 		}
 
 
-#if 0
 		if(intjes&ADXL345_FREE_FALL)
 		{ // detect freefall to keep time since last freefal to prevent modeswitch during juggle
 			prevfftick=HAL_GetTick();
@@ -186,12 +194,13 @@ int main(void)
 		}
 		else
 		{
-		if( tick > (unsigned int)(prevfftick+10000) )
-		{ // If a freefall is about 10 seconds ago
+		if( (HAL_GetTick() -5000) > prevfftick )
+		{ // If a freefall is about 5 seconds ago (TODO: is 10s not a little too long?)
 		Juggle = false;
 		}
 
-		if( tick > (unsigned int)(prevfftick+180) ){ // If a freefall just ended, assume ball is catched
+		if( (HAL_GetTick() - 180) > prevfftick)
+		{ // If a freefall just ended, assume ball is catched
 		//(increase wait time when falsely assumed, decrease when lagging too much)
 		// (Uses tick to prevent false catch detection while still falling)
 			if(Flying){ // Only detect catches when previously falling (flying). Otherwise lying still counts as a catch...
@@ -199,39 +208,99 @@ int main(void)
 				Catch = true;
 			}
 		}
-
 	}
-#endif
 
 
-		adxl_read_n_bytes(0x32, 6, buffer); // read xyz in one go
-		x=buffer[0]|(buffer[1]<<8);
-		y=buffer[2]|(buffer[3]<<8);
-		z=buffer[4]|(buffer[5]<<8);
+		switch(mode){
+				case direct: // colour change based on orientation to gravity / test mode
 
-		// because it is 2's complement, if bit 9 is set then bits 31 to 9 should also be set (To convert from 10 bit signed int to 32 bit signed int)
-		if(x&1<<9) x|=0xFFFFFC00;
-		if(y&1<<9) y|=0xFFFFFC00;
-		if(z&1<<9) z|=0xFFFFFC00;
+					adxl_read_n_bytes(0x32, 6, buffer); // read xyz in one go
+					x=buffer[0]|(buffer[1]<<8);
+					y=buffer[2]|(buffer[3]<<8);
+					z=buffer[4]|(buffer[5]<<8);
 
-		//scale XYZ to SETPOINT as max
-		float g,r,b;
-		g=x*PWM_MAX/(1<<8); // adxl is 10 bit, signed.
-		r=y*PWM_MAX/(1<<8);
-		b=z*PWM_MAX/(1<<8);
+					// because it is 2's complement, if bit 9 is set then bits 31 to 9 should also be set (To convert from 10 bit signed int to 32 bit signed int)
+					if(x&1<<9) x|=0xFFFFFC00;
+					if(y&1<<9) y|=0xFFFFFC00;
+					if(z&1<<9) z|=0xFFFFFC00;
 
-		if(g>PWM_MAX) g=PWM_MAX; // crowbar (force safe value)
-		if(r>PWM_MAX) r=PWM_MAX; // crowbar (force safe value)
-		if(b>PWM_MAX) b=PWM_MAX; // crowbar (force safe value)
-		if(g<0) g=0; // crowbar (force safe value / discard if below zero)
-		if(r<0) r=0; // crowbar (force safe value / discard if below zero)
-		if(b<0) b=0; // crowbar (force safe value / discard if below zero)
+					//scale XYZ to SETPOINT as max
+					float g,r,b;
+					g=x*PWM_MAX/(1<<8); // adxl is 10 bit, signed.
+					r=y*PWM_MAX/(1<<8);
+					b=z*PWM_MAX/(1<<8);
 
-	   __HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,g); /* GREEN */
-	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,b); 	/* BLUE */
-	   __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,r); 	/* RED */
+					if(g>PWM_MAX) g=PWM_MAX; // crowbar (force safe value)
+					if(r>PWM_MAX) r=PWM_MAX; // crowbar (force safe value)
+					if(b>PWM_MAX) b=PWM_MAX; // crowbar (force safe value)
+					if(g<0) g=0; // crowbar (force safe value / discard if below zero)
+					if(r<0) r=0; // crowbar (force safe value / discard if below zero)
+					if(b<0) b=0; // crowbar (force safe value / discard if below zero)
 
-	   /* Todo: use HAL_GetTick() to get a milisecond timer tick for all time-related things from original code. That ran at 55kHz, so modify for 1kHz*/
+					__HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,g); /* GREEN */
+					__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,b); 	/* BLUE */
+					__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,r); 	/* RED */
+
+					break;
+
+				case catchchange:
+				// clourchange on catch / juggle modue, End-Of-FreeFall based
+
+				setcolor_rgb(colors[0+cc],colors[1+cc],colors[2+cc]);
+
+				if(Catch){ // on catch:
+				//Change colour to the next one from the predefined list for catch
+					if ((3+cc)>=LEN_COLOR) cc=0; else cc+=3;
+					Catch=false;
+				}
+
+				break;
+
+
+				case freefall: // on freefall, red, on catch: flash green, else: be blue
+					if(intjes&ADXL345_FREE_FALL){ // on freefall:
+					setcolor_rgb(PWM_MAX,0,0);
+					}else if(Catch){ // on catch:
+						setcolor_rgb(0,PWM_MAX,0);
+						Catch=false;
+					}else{
+						setcolor_rgb(0,0,PWM_MAX);
+						}
+					HAL_Delay(200);
+					break;
+				// a case that keeps changing colour while juggle is true. (juggleball misbehaved as such while testing colorchange on catch and it kind of seems like a nice idea too)
+				case blinkcolorwheel:
+					if(Juggle){
+							if ((3+cc)>=LEN_COLOR) cc=0; else cc+=3;
+						setcolor_rgb(colors[0+cc],colors[1+cc],colors[2+cc]);
+						HAL_Delay(300);
+					}else{
+						setcolor_rgb(0,PWM_MAX,0);
+					} // So even when not juggling / on modechange, do show something other than "black" on the RGB leds
+					break;
+
+				case fadecolorwheel:
+					if(Juggle) rainbow(); else setcolor_rgb(PWM_MAX,0,0);
+					break;
+
+				case pureRGB:
+					if(Catch){ // on catch:
+					//Change colour to the next one, only RGB
+						setcolor_rgb(0,0,0);
+						if (rgb<2) rgb++; else rgb=0;
+						Catch=false;
+					}
+					switch(rgb){ // instead show RGB
+						case 0: setcolor_rgb(PWM_MAX,0,0); break;
+						case 1: setcolor_rgb(0,PWM_MAX,0); break;
+						case 2: setcolor_rgb(0,0,PWM_MAX); break;
+					}
+					break;
+
+				default:
+					mode = 0;
+					break;
+				}
 
 	   /* USER CODE END WHILE */
 
@@ -560,17 +629,18 @@ void go_sleep()
 }
 
 void rainbow(){
+	/* TODO: maybe try to copy visual effect from fastled, as this is currently not a rainbow. (Though still a nice colorfade) */
 	for(int i=0;i<PWM_MAX;i++){
 		setcolor_rgb(0,PWM_MAX-i,i);
-		HAL_Delay(20);
+		HAL_Delay(2);
 	}
 	for(int i=0;i<PWM_MAX;i++){
 		setcolor_rgb(i,0,PWM_MAX-i);
-		HAL_Delay(20);
+		HAL_Delay(2);
 	}
 	for(int i=0;i<PWM_MAX;i++){
 		setcolor_rgb(PWM_MAX-i,i,0);
-		HAL_Delay(20);
+		HAL_Delay(2);
 	}
 }
 
