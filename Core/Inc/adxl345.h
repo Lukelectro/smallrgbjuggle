@@ -1,6 +1,3 @@
-// From the GPL-ed arduino library that I do not use because this is not an arduino
-// But these definitions are handy
-
 #ifndef ADXL345_h
 #define ADXL345_h
 
@@ -58,22 +55,14 @@
 #define ADXL345_INT2_PIN 0x01
 
 /* 
- Interrupt bit position
+ Interrupt bit mask (Modified. Was bit position, so 0-7. Now is 0x01 0x80)
  */
-#define ADXL345_INT_DATA_READY_BIT 0x07
-#define ADXL345_INT_SINGLE_TAP_BIT 0x06
-#define ADXL345_INT_DOUBLE_TAP_BIT 0x05
-#define ADXL345_INT_ACTIVITY_BIT   0x04
-#define ADXL345_INT_INACTIVITY_BIT 0x03
-#define ADXL345_INT_FREE_FALL_BIT  0x02
-#define ADXL345_INT_WATERMARK_BIT  0x01
-#define ADXL345_INT_OVERRUNY_BIT   0x00
 
-#define ADXL345_DATA_READY 0x07
-#define ADXL345_SINGLE_TAP 0x06
-#define ADXL345_DOUBLE_TAP 0x05
-#define ADXL345_ACTIVITY   0x04
-#define ADXL345_INACTIVITY 0x03
+#define ADXL345_DATA_READY 0x80
+#define ADXL345_SINGLE_TAP 0x40
+#define ADXL345_DOUBLE_TAP 0x20
+#define ADXL345_ACTIVITY   0x10
+#define ADXL345_INACTIVITY 0x04
 #define ADXL345_FREE_FALL  0x02
 #define ADXL345_WATERMARK  0x01
 #define ADXL345_OVERRUNY   0x00
