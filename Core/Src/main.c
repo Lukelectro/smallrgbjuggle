@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include "adxl345.h"
 #include "config.h"
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -65,6 +66,8 @@ void adxl_init();
 void blink (int num);
 void go_sleep();
 void setcolor_rgb(unsigned int, unsigned int, unsigned int);
+void rainbow();
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -149,11 +152,56 @@ int main(void)
    while (1)
   {
 	   unsigned char buffer[6], intjes;
-	   int x,y,z;
+	   int x,y,z, tap;
+	   uint32_t prevtaptick, prevfftick; // timestamps for tap and freefall
+	   static bool Juggle=false, Catch=false, Flying=false; // Juggle in progress? Just catched?
 	   enum modes{direct, catchchange, freefall, blinkcolorwheel, fadecolorwheel, pureRGB} mode;
 
 	   intjes = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
 	   // reading resets them, so only read once a cycle
+
+	   // switch mode triple tap
+		if((intjes&ADXL345_SINGLE_TAP)&&(!Juggle)){ // on tap but not while juggling
+			prevtaptick=HAL_GetTick();
+			tap++;
+		}
+
+		if( HAL_GetTick() > (uint32_t)(prevtaptick+1000) ){ /* assuming tick at 1 Khz, 1 second */
+			tap=0;
+		}
+		else if(tap>2){ // TRIPLE tap. 3 and up > 2 :)
+			tap=0; // reset counter
+			mode++; // resets due to default case, so no fuss here.
+			setcolor_rgb(0,0,0);
+			blink(mode);
+		}
+
+
+#if 0
+		if(intjes&ADXL345_FREE_FALL)
+		{ // detect freefall to keep time since last freefal to prevent modeswitch during juggle
+			prevfftick=HAL_GetTick();
+			Juggle = true;
+			Flying=true;
+		}
+		else
+		{
+		if( tick > (unsigned int)(prevfftick+10000) )
+		{ // If a freefall is about 10 seconds ago
+		Juggle = false;
+		}
+
+		if( tick > (unsigned int)(prevfftick+180) ){ // If a freefall just ended, assume ball is catched
+		//(increase wait time when falsely assumed, decrease when lagging too much)
+		// (Uses tick to prevent false catch detection while still falling)
+			if(Flying){ // Only detect catches when previously falling (flying). Otherwise lying still counts as a catch...
+				Flying = false;
+				Catch = true;
+			}
+		}
+
+	}
+#endif
 
 
 		adxl_read_n_bytes(0x32, 6, buffer); // read xyz in one go
@@ -509,6 +557,21 @@ void go_sleep()
 	adxl_write_byte(ADXL345_POWER_CTL,0x08); // standbye -> measure (For lower noise)
 	adxl_read_byte(ADXL345_INT_SOURCE); // read interrupts (and clear them) from adxl, so MCU does not get sent back to sleep again by inactivity.
 
+}
+
+void rainbow(){
+	for(int i=0;i<PWM_MAX;i++){
+		setcolor_rgb(0,PWM_MAX-i,i);
+		HAL_Delay(20);
+	}
+	for(int i=0;i<PWM_MAX;i++){
+		setcolor_rgb(i,0,PWM_MAX-i);
+		HAL_Delay(20);
+	}
+	for(int i=0;i<PWM_MAX;i++){
+		setcolor_rgb(PWM_MAX-i,i,0);
+		HAL_Delay(20);
+	}
 }
 
 /* USER CODE END 4 */
