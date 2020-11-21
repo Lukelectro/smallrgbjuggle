@@ -513,14 +513,28 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(NSHDN_GPIO_Port, NSHDN_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pins : PF0 PF1 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+
   /*Configure GPIO pins : INPUT_Pin INT2_Pin */
   GPIO_InitStruct.Pin = INPUT_Pin|INT2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PA1 PA3 PA13 PA14 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_3|GPIO_PIN_13|GPIO_PIN_14;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -530,6 +544,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(NSHDN_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB1 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI0_1_IRQn, 2, 0);
@@ -629,14 +649,17 @@ void go_sleep()
 	/* Use HAL_PWR_EnterSLEEPMode(regulator,PWR_SLEEPENTRY_WFI) to go to sleep. */
 	/* Disable tick interrupt first if not wanting to wake-up on tick */
 	/* re-enable after wake-up.  */
+	HAL_GPIO_WritePin(NSHDN_GPIO_Port, NSHDN_Pin, 0);	/* Disable 5V supply */
 	HAL_SuspendTick(); /* Stop systick before going to sleep, so it does not wake every 1 ms */
-	HAL_PWR_EnterSLEEPMode(0,PWR_SLEEPENTRY_WFI);
+	HAL_PWR_EnterSTOPMode(0,PWR_SLEEPENTRY_WFI);
 	HAL_ResumeTick();
+	HAL_GPIO_WritePin(NSHDN_GPIO_Port, NSHDN_Pin, 1);	/* Enable 5V supply */
 
 	adxl_write_byte(ADXL345_POWER_CTL,0x00); // wake ADXL -> standbye
 	adxl_write_byte(ADXL345_POWER_CTL,0x08); // standbye -> measure (For lower noise)
 	adxl_read_byte(ADXL345_INT_SOURCE); // read interrupts (and clear them) from adxl, so MCU does not get sent back to sleep again by inactivity.
 
+	/* TODO: sleep mode still consumes 0,3 mA. This could potentially be much lower*/
 }
 
 void rainbow(){
