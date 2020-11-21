@@ -149,7 +149,7 @@ int main(void)
    adxl_init();
    blink(2);
 
-   //go_sleep(); /* Start by sleeping, so lights are not blinding during assembly TODO:first configure wake-up interrupts... */
+   go_sleep(); /* Start by sleeping, so lights are not blinding during assembly  */
 
 
   /* USER CODE END 2 */
@@ -166,6 +166,12 @@ int main(void)
 
 	   intjes = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
 	   // reading resets them, so only read once a cycle
+
+	   if((intjes&ADXL345_INACTIVITY)&&!(intjes&ADXL345_ACTIVITY)){ // inactivity.
+	   			for(int i = 0;i<3;i++) rainbow(); // Show rainbow fade and after that, go to sleep.
+	   			go_sleep();
+	   		}// activity will wake it up, but that's hardware (INT2 Wired to EXTI_PA5)
+
 
 	   // switch mode triple tap
 		if((intjes&ADXL345_SINGLE_TAP)&&(!Juggle)){ // on tap but not while juggling
@@ -195,7 +201,7 @@ int main(void)
 		else
 		{
 		if( (HAL_GetTick() -5000) > prevfftick )
-		{ // If a freefall is about 5 seconds ago (TODO: is 10s not a little too long?)
+		{ // If a freefall is about 5 seconds ago
 		Juggle = false;
 		}
 
@@ -212,6 +218,8 @@ int main(void)
 
 
 		switch(mode){
+		/* TODO: a "puzzle" mode, where ball needs to be moved in a certain way to get a reward (complicated pattern, then blinks green once :P XD )*/
+		/* TODO: Height-dependent color? */
 				case direct: // colour change based on orientation to gravity / test mode
 
 					adxl_read_n_bytes(0x32, 6, buffer); // read xyz in one go
@@ -302,7 +310,7 @@ int main(void)
 					break;
 				}
 
-	   /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
@@ -512,7 +520,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : INPUT_Pin INT2_Pin */
   GPIO_InitStruct.Pin = INPUT_Pin|INT2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -583,6 +591,9 @@ than 0x30 (3 g).
 	adxl_write_byte(ADXL345_POWER_CTL,0x08); // 8Hz in sleep, be active now, do not link inactivity/activity, do not autosleep on inactivity
 	adxl_write_byte(ADXL345_INT_ENABLE,0x5C);// enable single tap, activity, inactivity & freefall interrupts
 	adxl_write_byte(ADXL345_INT_MAP,0x10); // Only activity to INT2 pin
+
+/* TODO: above settings for tap etc might depend on enclosure. */
+	/* NOTE: activity interrupt / wake-up cannot be triggered while connected to debugger, as quite a swoosh/whip motion is needed. */
 }
 
 void blink (int num){
@@ -608,17 +619,17 @@ void setcolor_rgb(unsigned int red, unsigned int green, unsigned int blue)
 
 void go_sleep()
 {
-	/* Use HAL_PWR_EnterSLEEPMode(regulator,PWR_SLEEPENTRY_WFI) to go to sleep. */
-	/* Disable tick interrupt first if not wanting to wake-up on tick */
-	/* re-enable after wake-up.  */
-	HAL_SuspendTick(); /* Stop systick before going to sleep, so it does not wake every 1 ms */
-
 	adxl_read_byte(ADXL345_INT_SOURCE); // read interrupts (and clear them) from adxl
  	// because if it detects activity now, it's too soon to react too an thus will never be reacted too.
 
 	adxl_write_byte(ADXL345_POWER_CTL,0x0C); // put ADXL to sleep at 8 Hz sample rate.
 	// lower sample rates do not save more power, so let's update at 8Hz.
 
+	setcolor_rgb(0,0,0);
+	/* Use HAL_PWR_EnterSLEEPMode(regulator,PWR_SLEEPENTRY_WFI) to go to sleep. */
+	/* Disable tick interrupt first if not wanting to wake-up on tick */
+	/* re-enable after wake-up.  */
+	HAL_SuspendTick(); /* Stop systick before going to sleep, so it does not wake every 1 ms */
 	HAL_PWR_EnterSLEEPMode(0,PWR_SLEEPENTRY_WFI);
 	HAL_ResumeTick();
 
@@ -630,17 +641,18 @@ void go_sleep()
 
 void rainbow(){
 	/* TODO: maybe try to copy visual effect from fastled, as this is currently not a rainbow. (Though still a nice colorfade) */
-	for(int i=0;i<PWM_MAX;i++){
+	for(int i=0;i<PWM_MAX;i+=5){
 		setcolor_rgb(0,PWM_MAX-i,i);
-		HAL_Delay(2);
+		HAL_Delay(1);
 	}
-	for(int i=0;i<PWM_MAX;i++){
+	for(int i=0;i<PWM_MAX;i+=5){
 		setcolor_rgb(i,0,PWM_MAX-i);
-		HAL_Delay(2);
+		HAL_Delay(1);
 	}
-	for(int i=0;i<PWM_MAX;i++){
+	for(int i=0;i<PWM_MAX;i+=5){
 		setcolor_rgb(PWM_MAX-i,i,0);
-		HAL_Delay(2);
+		HAL_Delay(1);
+		/* TODO: looks nice both fast and slow. Maybe make a selectable speed based on something juggly*/
 	}
 }
 

@@ -1,8 +1,6 @@
 #ifndef __CONFIG
 #define __CONFIG
 
-/* TODO: modify / complete for smallrgbjuggle */
-
 #define PWM_MAX 4096
 
 

@@ -163,6 +163,7 @@ void EXTI4_15_IRQHandler(void)
   /* USER CODE END EXTI4_15_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_5);
   /* USER CODE BEGIN EXTI4_15_IRQn 1 */
+  HAL_ResumeTick(); /* Resume asap */
   /* TODO: add handler if needed, ADXL interrupt pin*/
   /* USER CODE END EXTI4_15_IRQn 1 */
 }
