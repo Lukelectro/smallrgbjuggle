@@ -168,7 +168,7 @@ int main(void)
 	   // reading resets them, so only read once a cycle
 
 	   if((intjes&ADXL345_INACTIVITY)&&!(intjes&ADXL345_ACTIVITY)){ // inactivity.
-	   			for(int i = 0;i<3;i++) rainbow(); // Show rainbow fade and after that, go to sleep.
+	   			for(int i = 0;i<3;i++) rainbow(10); // Show rainbow fade and after that, go to sleep.
 	   			go_sleep();
 	   		}// activity will wake it up, but that's hardware (INT2 Wired to EXTI_PA5)
 
@@ -288,7 +288,7 @@ int main(void)
 					break;
 
 				case fadecolorwheel:
-					if(Juggle) rainbow(); else setcolor_rgb(PWM_MAX,0,0);
+					if(Juggle) rainbow(6); else setcolor_rgb(PWM_MAX,0,0);
 					break;
 
 				case pureRGB:
@@ -532,8 +532,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA1 PA3 PA13 PA14 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_3|GPIO_PIN_13|GPIO_PIN_14;
+  /*Configure GPIO pins : PA1 PA3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_3;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -645,7 +645,12 @@ void go_sleep()
 	adxl_write_byte(ADXL345_POWER_CTL,0x0C); // put ADXL to sleep at 8 Hz sample rate.
 	// lower sample rates do not save more power, so let's update at 8Hz.
 
-	setcolor_rgb(0,0,0);
+	//setcolor_rgb(0,0,0); /* TODO: set those pins driving the LED's to ground. Just setting PWM 0 seems not enough. */
+
+	HAL_TIM_PWM_Stop(&htim3,TIM_CHANNEL_1); /* BLUE */
+	HAL_TIM_PWM_Stop(&htim3,TIM_CHANNEL_2); /* RED*/
+	HAL_TIM_PWM_Stop(&htim14,TIM_CHANNEL_1); /* GREEN */
+
 	/* Use HAL_PWR_EnterSLEEPMode(regulator,PWR_SLEEPENTRY_WFI) to go to sleep. */
 	/* Disable tick interrupt first if not wanting to wake-up on tick */
 	/* re-enable after wake-up.  */
@@ -659,23 +664,26 @@ void go_sleep()
 	adxl_write_byte(ADXL345_POWER_CTL,0x08); // standbye -> measure (For lower noise)
 	adxl_read_byte(ADXL345_INT_SOURCE); // read interrupts (and clear them) from adxl, so MCU does not get sent back to sleep again by inactivity.
 
-	/* TODO: sleep mode still consumes 0,3 mA. This could potentially be much lower*/
+	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1); /* BLUE */
+	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_2); /* RED*/
+	HAL_TIM_PWM_Start(&htim14,TIM_CHANNEL_1); /* GREEN */
+
 }
 
-void rainbow(){
+void rainbow(unsigned int step){
 	/* TODO: maybe try to copy visual effect from fastled, as this is currently not a rainbow. (Though still a nice colorfade) */
-	for(int i=0;i<PWM_MAX;i+=5){
+	/* Note: speed selectable by choosing step. 1 is slowest, 5 is medium, 10 is fast and can be even faster.*/
+	for(int i=0;i<PWM_MAX;i+=step){
 		setcolor_rgb(0,PWM_MAX-i,i);
 		HAL_Delay(1);
 	}
-	for(int i=0;i<PWM_MAX;i+=5){
+	for(int i=0;i<PWM_MAX;i+=step){
 		setcolor_rgb(i,0,PWM_MAX-i);
 		HAL_Delay(1);
 	}
-	for(int i=0;i<PWM_MAX;i+=5){
+	for(int i=0;i<PWM_MAX;i+=step){
 		setcolor_rgb(PWM_MAX-i,i,0);
 		HAL_Delay(1);
-		/* TODO: looks nice both fast and slow. Maybe make a selectable speed based on something juggly*/
 	}
 }
 
