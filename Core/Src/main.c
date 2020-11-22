@@ -163,6 +163,7 @@ int main(void)
 	   static uint32_t prevtaptick=0, prevfftick=0; // timestamps for tap and freefall
 	   static bool Juggle=false, Catch=false, Flying=false; // Juggle in progress? Just catched?
 	   static enum modes{direct, catchchange, freefall, blinkcolorwheel, fadecolorwheel, pureRGB} mode;
+	   /* TODO: modi for just red, just green, just blue, puzzle, height-indicator, etc. and maybe remove unused ones like freefall, direct, blinkkcolorwheel. */
 
 	   intjes = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
 	   // reading resets them, so only read once a cycle
@@ -616,16 +617,31 @@ than 0x30 (3 g).
 	/* NOTE: activity interrupt / wake-up cannot be triggered while connected to debugger, as quite a swoosh/whip motion is needed. */
 }
 
+/* blink the mode number. green = 1, red = 5, blue = 10 */
 void blink (int num){
- setcolor_rgb(0,0,0);
- HAL_Delay(200);
+	setcolor_rgb(0,0,0);
+	HAL_Delay(200);
 
-while(num--){
- setcolor_rgb(0,PWM_MAX,0);
- HAL_Delay(100);
- setcolor_rgb(0,0,0);
- HAL_Delay(200);
- }
+	while(num>10){
+		setcolor_rgb(0,0,PWM_MAX);
+		HAL_Delay(100);
+		setcolor_rgb(0,0,0);
+		HAL_Delay(200);
+		num-=10;
+	}
+	while(num>5){
+		setcolor_rgb(PWM_MAX,0,0);
+		HAL_Delay(100);
+		setcolor_rgb(0,0,0);
+		HAL_Delay(200);
+		num-=5;
+	}
+	while(num--){
+		setcolor_rgb(0,PWM_MAX,0);
+		HAL_Delay(100);
+		setcolor_rgb(0,0,0);
+		HAL_Delay(200);
+	}
 
 }
 
