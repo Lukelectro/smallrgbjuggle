@@ -63,6 +63,7 @@ unsigned char adxl_read_byte(unsigned char);
 void adxl_read_n_bytes(unsigned char, unsigned char, unsigned char* );
 void adxl_write_byte(unsigned char, unsigned char);
 void adxl_init();
+void read_xyz(int*,int*,int*);
 void blink (int num);
 void go_sleep();
 void setcolor_rgb(unsigned int, unsigned int, unsigned int);
@@ -158,14 +159,13 @@ int main(void)
 	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
-		static unsigned char buffer[6], intjes, rgb;
+		static unsigned char intjes, rgb;
 		static int x,y,z, tap, cc=0, catches=0;
 		static uint32_t prevtaptick=0, prevfftick=0; // timestamps for tap and freefall
 		static bool Juggle=false, Catch=false, Flying=false; // Juggle in progress? Just catched?
 		static enum modes{catchchange, pureRGB, red, green, blue, puzzle} mode;
-		/* TODO: modi for just red, just green, just blue, puzzle, height-indicator, etc. and maybe remove unused ones like freefall, direct, blinkkcolorwheel. */
+		/* TODO: height-indicator mode? */
 		static enum puzzlestates{P_RESET, P_TWIST, P_CATCH, P_BUMP, P_SOLVED} puzzlestate;
-
 
 		intjes = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
 		// reading resets them, so only read once a cycle
@@ -174,7 +174,6 @@ int main(void)
 			for(int i = 0;i<3;i++) rainbow(10); // Show rainbow fade and after that, go to sleep.
 			go_sleep();
 		}// activity will wake it up, but that's hardware (INT2 Wired to EXTI_PA5)
-
 
 		// switch mode triple tap
 		if((intjes&ADXL345_SINGLE_TAP)&&(!Juggle)){ // on tap but not while juggling
@@ -221,7 +220,6 @@ int main(void)
 
 
 		switch(mode){
-		/* TODO: a "puzzle" mode, where ball needs to be moved in a certain way to get a reward (complicated pattern, then blinks green once :P XD )*/
 		/* TODO: Height-dependent color? */
 		/* TODO: detect catch and drop difference, count catches? Maybe for puzzle? */
 		case catchchange:
@@ -259,39 +257,10 @@ int main(void)
 				setcolor_rgb(0,0,PWM_MAX);
 				break;
 			case puzzle:
+				//Idea: a "puzzle" mode, where ball needs to be moved in a certain way to get a reward (complicated pattern, then blinks green once :P XD )
 				// moved out of loop for clarity and to be able to reset puzzle when leaving mode
 				break;
 #if 0 /* old / unused modi. Might recycle code from them later */
-			case direct: // colour change based on orientation to gravity / test mode.
-
-				adxl_read_n_bytes(0x32, 6, buffer); // read xyz in one go
-				x=buffer[0]|(buffer[1]<<8);
-				y=buffer[2]|(buffer[3]<<8);
-				z=buffer[4]|(buffer[5]<<8);
-
-				// because it is 2's complement, if bit 9 is set then bits 31 to 9 should also be set (To convert from 10 bit signed int to 32 bit signed int)
-				if(x&1<<9) x|=0xFFFFFC00;
-				if(y&1<<9) y|=0xFFFFFC00;
-				if(z&1<<9) z|=0xFFFFFC00;
-
-				//scale XYZ to SETPOINT as max
-				float g,r,b;
-				g=x*PWM_MAX/(1<<8); // adxl is 10 bit, signed.
-				r=y*PWM_MAX/(1<<8);
-				b=z*PWM_MAX/(1<<8);
-
-				if(g>PWM_MAX) g=PWM_MAX; // crowbar (force safe value)
-				if(r>PWM_MAX) r=PWM_MAX; // crowbar (force safe value)
-				if(b>PWM_MAX) b=PWM_MAX; // crowbar (force safe value)
-				if(g<0) g=0; // crowbar (force safe value / discard if below zero)
-				if(r<0) r=0; // crowbar (force safe value / discard if below zero)
-				if(b<0) b=0; // crowbar (force safe value / discard if below zero)
-
-				__HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,g); /* GREEN */
-				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,b); 	/* BLUE */
-				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,r); 	/* RED */
-
-				break;
 			case freefall: // on freefall, red, on catch: flash green, else: be blue
 				if(intjes&ADXL345_FREE_FALL){ // on freefall:
 					setcolor_rgb(PWM_MAX,0,0);
@@ -326,17 +295,8 @@ int main(void)
 		if (mode==puzzle)
 		{
 			/* state machine for puzzle state, state change untill "solved", reset when changing mode */
-			float g,r,b;
-
-			adxl_read_n_bytes(0x32, 6, buffer); // read xyz in one go
-			x=buffer[0]|(buffer[1]<<8);
-			y=buffer[2]|(buffer[3]<<8);
-			z=buffer[4]|(buffer[5]<<8);
-
-			// because it is 2's complement, if bit 9 is set then bits 31 to 9 should also be set (To convert from 10 bit signed int to 32 bit signed int)
-			if(x&1<<9) x|=0xFFFFFC00;
-			if(y&1<<9) y|=0xFFFFFC00;
-			if(z&1<<9) z|=0xFFFFFC00;
+			unsigned int r,g,b;
+			read_xyz(&x,&y,&z);
 
 			switch(puzzlestate)
 			{
@@ -346,26 +306,19 @@ int main(void)
 				setcolor_rgb(0,0,0);
 				break;
 			case P_TWIST:
-				/* Twist until a specific orientation to gravity / specific color is reached. (And TODO: maybe hold that color for a while) */
+				/* Twist until a specific orientation to gravity / specific color is reached.
+				 * TODO: maybe require hold that color for a while to make it more difficult to find */
 
-				//scale XYZ to SETPOINT as max
-				g=x*PWM_MAX/(1<<8); // adxl is 10 bit, signed.
-				r=y*PWM_MAX/(1<<8);
-				b=z*PWM_MAX/(1<<8);
+				//scale XYZ to PWM_MAX as maximum, discard below 0 (adxl is 10 bit, signed.)
+				if(x>0) g=x*PWM_MAX/(1<<8); else g=0;
+				if(y>0) r=y*PWM_MAX/(1<<8); else r=0;
+				if(z>0) b=z*PWM_MAX/(1<<8); else b=0;
 
-				if(g>PWM_MAX) g=PWM_MAX; // crowbar (force safe value)
-				if(r>PWM_MAX) r=PWM_MAX; // crowbar (force safe value)
-				if(b>PWM_MAX) b=PWM_MAX; // crowbar (force safe value)
-				if(g<0) g=0; // crowbar (force safe value / discard if below zero)
-				if(r<0) r=0; // crowbar (force safe value / discard if below zero)
-				if(b<0) b=0; // crowbar (force safe value / discard if below zero)
-
-				__HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,g); /* GREEN */
-				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,b); 	/* BLUE */
-				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,r); 	/* RED */
+				setcolor_rgb(r,g,b);
 
 				if( (x<0)&&(y>120)&&(z>64)&&(z<128) ) puzzlestate = P_CATCH; /* change to next stage on correct orientation */
 				/* TODO: maybe semi-random orientation each time a new puzzle is started?*/
+				// note: if( (x>120)&&(y<0)&&(z>64)&&(z<128) ) results in bluegreen-ish, nice also
 				break;
 			case P_CATCH:
 				/* catch at least n times, withouth too large of a pause in between (TODO: detect dropping) (TODO: minimum freefall time)*/
@@ -733,6 +686,10 @@ void blink (int num){
 
 void setcolor_rgb(unsigned int red, unsigned int green, unsigned int blue)
 {
+	if(green>PWM_MAX) green=PWM_MAX; // crowbar (force safe value)
+	if(red>PWM_MAX) red=PWM_MAX; // crowbar (force safe value)
+	if(blue>PWM_MAX) blue=PWM_MAX; // crowbar (force safe value)
+
 	__HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,green);
 	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,blue);
 	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,red);
@@ -745,8 +702,6 @@ void go_sleep()
 
 	adxl_write_byte(ADXL345_POWER_CTL,0x0C); // put ADXL to sleep at 8 Hz sample rate.
 	// lower sample rates do not save more power, so let's update at 8Hz.
-
-	//setcolor_rgb(0,0,0); /* TODO: set those pins driving the LED's to ground. Just setting PWM 0 seems not enough. */
 
 	HAL_TIM_PWM_Stop(&htim3,TIM_CHANNEL_1); /* BLUE */
 	HAL_TIM_PWM_Stop(&htim3,TIM_CHANNEL_2); /* RED*/
@@ -786,6 +741,21 @@ void rainbow(unsigned int step){
 		setcolor_rgb(PWM_MAX-i,i,0);
 		HAL_Delay(1);
 	}
+}
+
+void read_xyz(int* px, int* py, int* pz)
+{
+	static unsigned char buffer[6];
+
+	adxl_read_n_bytes(0x32, 6, buffer); // read xyz in one go
+	*px=buffer[0]|(buffer[1]<<8);
+	*py=buffer[2]|(buffer[3]<<8);
+	*pz=buffer[4]|(buffer[5]<<8);
+
+	// because it is 2's complement, if bit 9 is set then bits 31 to 9 should also be set (To convert from 10 bit signed int to 32 bit signed int)
+	if( *px & (1<<9) ) *px|=0xFFFFFC00;
+	if( *py & (1<<9) ) *py|=0xFFFFFC00;
+	if( *pz & (1<<9) ) *pz|=0xFFFFFC00;
 }
 
 /* USER CODE END 4 */
