@@ -165,7 +165,7 @@ int main(void)
 		static bool Juggle=false, Catch=false, Flying=false; // Juggle in progress? Just catched?
 		static enum modes{catchchange, pureRGB, red, green, blue, puzzle} mode;
 		/* TODO: height-indicator mode? */
-		static enum puzzlestates{P_RESET, P_TWIST, P_CATCH, P_BUMP, P_SOLVED} puzzlestate;
+		static enum puzzlestates{P_RESET, P_TWIST_1, P_GREENFLASH_1 ,P_TWIST_2, P_CATCH, P_SOLVED} puzzlestate;
 
 		intjes = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
 		// reading resets them, so only read once a cycle
@@ -298,27 +298,46 @@ int main(void)
 			unsigned int r,g,b;
 			read_xyz(&x,&y,&z);
 
+			//scale XYZ to PWM_MAX as maximum, discard below 0 (adxl is 10 bit, signed.)
+			if(x>0) g=x*PWM_MAX/(1<<8); else g=0;
+			if(y>0) r=y*PWM_MAX/(1<<8); else r=0;
+			if(z>0) b=z*PWM_MAX/(1<<8); else b=0;
+
 			switch(puzzlestate)
 			{
 			case P_RESET:
 				catches = 0;
-				puzzlestate = P_TWIST;
 				setcolor_rgb(0,0,0);
+				HAL_Delay(200);
+				setcolor_rgb(PWM_MAX,0,0); /* Red flash on reset as feedback when sent back to start */
+				HAL_Delay(250);
+				setcolor_rgb(0,0,0);
+				HAL_Delay(200);
+				puzzlestate = P_TWIST_1;
 				break;
-			case P_TWIST:
+			case P_TWIST_1:
 				/* Twist until a specific orientation to gravity / specific color is reached.
 				 * TODO: maybe require hold that color for a while to make it more difficult to find */
-
-				//scale XYZ to PWM_MAX as maximum, discard below 0 (adxl is 10 bit, signed.)
-				if(x>0) g=x*PWM_MAX/(1<<8); else g=0;
-				if(y>0) r=y*PWM_MAX/(1<<8); else r=0;
-				if(z>0) b=z*PWM_MAX/(1<<8); else b=0;
-
 				setcolor_rgb(r,g,b);
 
-				if( (x<0)&&(y>120)&&(z>64)&&(z<128) ) puzzlestate = P_CATCH; /* change to next stage on correct orientation */
+				if( (x<0)&&(y>120)&&(z>64)&&(z<128) ) puzzlestate = P_GREENFLASH_1; /* change to next stage on correct orientation */
 				/* TODO: maybe semi-random orientation each time a new puzzle is started?*/
-				// note: if( (x>120)&&(y<0)&&(z>64)&&(z<128) ) results in bluegreen-ish, nice also
+				break;
+			case P_GREENFLASH_1:
+				/* bit of feedback in between, else way too difficult. */
+				setcolor_rgb(0,0,0);
+				HAL_Delay(200);
+				setcolor_rgb(0,PWM_MAX,0); /* green flash  */
+				HAL_Delay(10); /* short */
+				setcolor_rgb(0,0,0);
+				HAL_Delay(600);
+				puzzlestate=P_TWIST_2;
+
+			case P_TWIST_2:
+				setcolor_rgb(r,g,b);
+
+				if( (x>120)&&(y<0)&&(z>64)&&(z<128) ) puzzlestate = P_CATCH; /* go to next stage */
+				if( (x>120)&&(y>120)&&(z<64) ) puzzlestate = P_RESET; /* Go back !*/
 				break;
 			case P_CATCH:
 				/* catch at least n times, withouth too large of a pause in between (TODO: detect dropping) (TODO: minimum freefall time)*/
@@ -329,7 +348,7 @@ int main(void)
 					blink(catches);
 				}
 				if (Juggle == false) catches = 0;
-				if (catches >= 7) puzzlestate = P_SOLVED;
+				if (catches >= 3) puzzlestate = P_SOLVED;
 				/* TODO: add something to reset to first stage. So if(dropped) puzzlestate = P_RESET. Else the only way is forward... Makes puzzle too easy */
 				break;
 			case P_SOLVED:
