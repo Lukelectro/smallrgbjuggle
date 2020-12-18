@@ -9,6 +9,8 @@
 // certainly it's a bad idea to hardcode values
 // Does cortex M0 have a hw divider? Float multiplier? Does my compiler use them?
 // Meh, premature optimalisation. Besides, I could just use floats, precalculate the arrays, and then use the calculated onces :)
+
+#if 0
 #define LEN_COLOR 33
 const int colorset_percentage[LEN_COLOR] = //r,g,b
 {
@@ -18,12 +20,29 @@ const int colorset_percentage[LEN_COLOR] = //r,g,b
  100,60,0,   //yellow
  0,0,100,     //blue
  0,100,0,    //green
- 30,0,100,		// untested... Blue Purple-ish?
+ 30,0,100,		// Blue Purple-ish white
  100,100,100, // white 
  0,100,100,    //bluegreen
  100,0,100,   // purple
- 0,100,60	// untested... greenish Blueish?
- }; 
+ 0,100,60	// greenish Blueish?
+ };
+#endif
+
+/* change order / sort, make into 9 colors so odd multiple of 3 */
+#define LEN_COLOR 27
+const int colorset_percentage[LEN_COLOR] = //r,g,b
+{
+		100,0,0,    //red
+		100,60,0,   //yellow
+		0,100,0,    //green
+		0,100,100,  //bluegreen
+		0,0,100,    //blue
+		30,0,100,	// Blue Purple-ish white
+		100,100,100,//white
+		100,0,100,  // purple
+		100,0,30,   //magenta/pink purple
+};
+
 // How this works:  const array is filled with percentages of SETPOINT (Max).
 // then setpoints are calculated as percentage of max and stored in a variable aray
 // as start of main, further down the variable array is used
