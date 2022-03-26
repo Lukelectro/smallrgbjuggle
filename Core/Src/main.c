@@ -34,6 +34,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// define 1 for color order, comment other(s). BRG is order with the 5050 RGB led's. RGB is color order with the 1206 blue led placed next to the 5050 to replace it's blue. (That shifts the 5050 1 place)
+#define COLOR_ORDER_RGB
+//#define COLOR_ORDER_BRG
+#warning 'set color order!'
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -111,9 +116,9 @@ int main(void)
 
 	HAL_GPIO_WritePin(NSHDN_GPIO_Port, NSHDN_Pin, 1);	/* Enable 5V supply */
 	//HAL_GPIO_WritePin(NSHDN_GPIO_Port, NSHDN_Pin, 0);	/* Disable 5V supply */
-	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1); /* BLUE */
-	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_2); /* RED*/
-	HAL_TIM_PWM_Start(&htim14,TIM_CHANNEL_1); /* GREEN */
+	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1); /* BLUE (Or RED if blue is a seperate 1206 LED next to a shifted 5050) */
+	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_2); /* RED (Green when shifted) */
+	HAL_TIM_PWM_Start(&htim14,TIM_CHANNEL_1); /* GREEN (Blue 1206) */
 
 	/* Flash R,G,B to verify color order is correct */
 	setcolor_rgb(PWM_MAX,0,0);
@@ -709,9 +714,16 @@ void setcolor_rgb(unsigned int red, unsigned int green, unsigned int blue)
 	if(red>PWM_MAX) red=PWM_MAX; // crowbar (force safe value)
 	if(blue>PWM_MAX) blue=PWM_MAX; // crowbar (force safe value)
 
+#ifdef COLOR_ORDER_BRG
 	__HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,green);
 	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,blue);
 	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,red);
+#endif
+#ifdef COLOR_ORDER_RGB
+	__HAL_TIM_SET_COMPARE(&htim14,TIM_CHANNEL_1,blue);
+	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,red);
+	__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_2,green);
+#endif
 }
 
 void go_sleep()
@@ -739,9 +751,9 @@ void go_sleep()
 	adxl_write_byte(ADXL345_POWER_CTL,0x08); // standbye -> measure (For lower noise)
 	adxl_read_byte(ADXL345_INT_SOURCE); // read interrupts (and clear them) from adxl, so MCU does not get sent back to sleep again by inactivity.
 
-	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1); /* BLUE */
-	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_2); /* RED*/
-	HAL_TIM_PWM_Start(&htim14,TIM_CHANNEL_1); /* GREEN */
+	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1); /* BLUE (Or RED) */
+	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_2); /* RED (Or Green) */
+	HAL_TIM_PWM_Start(&htim14,TIM_CHANNEL_1); /* GREEN (Or Blue) */
 
 }
 
