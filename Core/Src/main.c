@@ -153,7 +153,6 @@ int main(void)
 	setcolor_rgb(0,0,0);
 
 	adxl_init();
-	blink(2);
 
 	go_sleep(); /* Start by sleeping, so lights are not blinding during assembly  */
 
@@ -164,24 +163,24 @@ int main(void)
 	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
-		static unsigned char intjes, rgb;
-		static int x,y,z, tap, cc=0, catches=0;
+		static unsigned char adxl_interupt_flags, rgb;
+		static int tap, cc=0, catches=0;
 		static uint32_t prevtaptick=0, prevfftick=0; // timestamps for tap and freefall
 		static bool Juggle=false, Catch=false, Flying=false; // Juggle in progress? Just catched?
 		static enum modes{catchchange, pureRGB, red, green, blue, puzzle} mode;
-		/* TODO: height-indicator mode? */
-		static enum puzzlestates{P_RESET, P_TWIST_1, P_GREENFLASH_1 ,P_TWIST_2, P_CATCH, P_SOLVED} puzzlestate;
+		//static enum puzzlestates{P_RESET, P_TWIST_1, P_GREENFLASH_1 ,P_TWIST_2, P_CATCH, P_SOLVED} puzzlestate;
+		//static int x,y,z;
 
-		intjes = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
+		adxl_interupt_flags = adxl_read_byte(ADXL345_INT_SOURCE); // read adxl interrupt flags (to sense taps/freefall etc.)
 		// reading resets them, so only read once a cycle
 
-		if((intjes&ADXL345_INACTIVITY)&&!(intjes&ADXL345_ACTIVITY)){ // inactivity.
+		if((adxl_interupt_flags&ADXL345_INACTIVITY)&&!(adxl_interupt_flags&ADXL345_ACTIVITY)){ // inactivity.
 			for(int i = 0;i<3;i++) rainbow(10); // Show rainbow fade and after that, go to sleep.
 			go_sleep();
 		}// activity will wake it up, but that's hardware (INT2 Wired to EXTI_PA5)
 
 		// switch mode triple tap
-		if((intjes&ADXL345_SINGLE_TAP)&&(!Juggle)){ // on tap but not while juggling
+		if((adxl_interupt_flags&ADXL345_SINGLE_TAP)&&(!Juggle)){ // on tap but not while juggling
 			prevtaptick=HAL_GetTick();
 			tap++;
 		}
@@ -190,7 +189,6 @@ int main(void)
 		{ // TRIPLE tap. 3 and up > 2 :)
 			tap=0; // reset counter
 			mode++; // resets due to default case, so no fuss here.
-			setcolor_rgb(0,0,0);
 			blink(mode+1); /* +1 because 0 indexed */
 		}
 		else if( (HAL_GetTick() - 1000) > prevtaptick )
@@ -199,7 +197,7 @@ int main(void)
 		}
 
 
-		if(intjes&ADXL345_FREE_FALL)
+		if(adxl_interupt_flags&ADXL345_FREE_FALL)
 		{ // detect freefall to keep time since last freefal to prevent modeswitch during juggle
 			prevfftick=HAL_GetTick();
 			Juggle = true;
@@ -208,8 +206,9 @@ int main(void)
 		else
 		{
 			if( (HAL_GetTick() -5000) > prevfftick )
-			{ // If a freefall is about 5 seconds ago
+			{ // If a freefall is about 5 seconds ago, this ball is not currently being juggled anymore
 				Juggle = false;
+				catches = 0;
 			}
 
 			if( (HAL_GetTick() - 180) > prevfftick)
@@ -219,6 +218,7 @@ int main(void)
 				if(Flying){ // Only detect catches when previously falling (flying). Otherwise lying still counts as a catch...
 					Flying = false;
 					Catch = true;
+					catches++; /* count number of catches*/
 				}
 			}
 		}
@@ -226,7 +226,7 @@ int main(void)
 
 		switch(mode){
 		/* TODO: Height-dependent color? */
-		/* TODO: detect catch and drop difference, count catches? Maybe for puzzle? */
+		/* TODO: detect catch and drop difference, count catches? Then somehow show number of catches? */
 		case catchchange:
 			// clourchange on catch / juggle modue, End-Of-FreeFall based
 
@@ -252,22 +252,22 @@ int main(void)
 			case 2: setcolor_rgb(0,0,PWM_MAX); break;
 			}
 			break;
-			case red:
-				setcolor_rgb(PWM_MAX,0,0);
-				break;
-			case green:
-				setcolor_rgb(0,PWM_MAX,0);
-				break;
-			case blue:
-				setcolor_rgb(0,0,PWM_MAX);
-				break;
+		case red:
+			setcolor_rgb(PWM_MAX,0,0);
+			break;
+		case green:
+			setcolor_rgb(0,PWM_MAX,0);
+			break;
+		case blue:
+			setcolor_rgb(0,0,PWM_MAX);
+			break;
+#if 0 /* old / unused modi. Might recycle code from them later */
 			case puzzle:
 				//Idea: a "puzzle" mode, where ball needs to be moved in a certain way to get a reward (complicated pattern, then blinks green once :P XD )
 				// moved out of loop for clarity and to be able to reset puzzle when leaving mode
 				break;
-#if 0 /* old / unused modi. Might recycle code from them later */
 			case freefall: // on freefall, red, on catch: flash green, else: be blue
-				if(intjes&ADXL345_FREE_FALL){ // on freefall:
+				if(adxl_interupt_flags&ADXL345_FREE_FALL){ // on freefall:
 					setcolor_rgb(PWM_MAX,0,0);
 				}else if(Catch){ // on catch:
 					setcolor_rgb(0,PWM_MAX,0);
@@ -296,7 +296,7 @@ int main(void)
 				mode = 0;
 				break;
 		}
-
+#if 0
 		if (mode==puzzle)
 		{
 			/* state machine for puzzle state, state change untill "solved", reset when changing mode */
@@ -372,7 +372,7 @@ int main(void)
 		{
 			puzzlestate = P_RESET;
 		}
-
+#endif
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
@@ -679,32 +679,27 @@ than 0x30 (3 g).
 	/* NOTE: activity interrupt / wake-up cannot be triggered while connected to debugger, as quite a swoosh/whip motion is needed. */
 }
 
-/* blink the mode number. green = 1, red = 5, blue = 10 */
+/* blink the mode number. green = 1, red = 5, blue = 10 */ /* for faster mode switching: red = 1, green = 2, blue = 4 and add, up to 7 modes. Then blink */
 void blink (int num){
+	unsigned int red,green,blue;
 	setcolor_rgb(0,0,0);
-	HAL_Delay(200);
+	HAL_Delay(100);
+	if(0!=(num&0x01)) red = PWM_MAX; else red = 0;
+	if(0!=(num&0x02)) green = PWM_MAX; else green = 0;
+	if(0!=(num&0x04)) blue = PWM_MAX; else blue = 0;
 
-	while(num>10){
-		setcolor_rgb(0,0,PWM_MAX);
+	while(num>7){
+		setcolor_rgb(PWM_MAX,PWM_MAX,PWM_MAX);
 		HAL_Delay(100);
 		setcolor_rgb(0,0,0);
-		HAL_Delay(200);
-		num-=10;
-	}
-	while(num>5){
-		setcolor_rgb(PWM_MAX,0,0);
 		HAL_Delay(100);
-		setcolor_rgb(0,0,0);
-		HAL_Delay(200);
-		num-=5;
-	}
-	while(num--){
-		setcolor_rgb(0,PWM_MAX,0);
-		HAL_Delay(100);
-		setcolor_rgb(0,0,0);
-		HAL_Delay(200);
+		num-=7;
 	}
 
+	setcolor_rgb(red,green,blue);
+	HAL_Delay(100);
+	setcolor_rgb(0,0,0);
+	HAL_Delay(100);
 }
 
 
