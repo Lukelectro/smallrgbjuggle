@@ -1,0 +1,7 @@
+Copy of binairy build output from /debug/ folder which is in gitignore.
+
+Because on import in the newest STM32cubeMX, the project could not be build (No build configuration) and cubeMX is being frustrating so I'll just add the binairy and go sit by a lake https://xkcd.com/1024/ or touch grass or something.
+
+Solution probably would be to just create a blank new project for STM32F030F4P6 and then copy into that project only the relevant source- and include files.
+
+For now, this will have to do. This .elf can be programmed into an STM32F030F4P6
