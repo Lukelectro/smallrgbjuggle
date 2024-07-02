@@ -140,11 +140,17 @@ int main(void)
 	else
 	{
 		setcolor_rgb(PWM_MAX,0,0);
+		/*
+		while(1){
+			rainbow(8); // for the one without a functional accelerometer: keep fading a rainbow...
+		}
+		//hum, that will hinder recharging
+		*/
 	}
+	HAL_Delay(4000); // so debugger has a chance to connect
 
-	HAL_Delay(2500);
 
-	//setup array of nice collors
+	//setup array of nice colors
 	int colors[LEN_COLOR];
 	for(int i = 0;i<LEN_COLOR;i++){
 		colors[i]=colorset_percentage[i]*PWM_MAX/100;
@@ -205,8 +211,8 @@ int main(void)
 		}
 		else
 		{
-			if( (HAL_GetTick() -5000) > prevfftick )
-			{ // If a freefall is about 5 seconds ago, this ball is not currently being juggled anymore
+			if( (HAL_GetTick() -1500) > prevfftick )
+			{ // If a freefall is about 1.5 seconds ago, this ball is not currently being juggled anymore (originally 5, is too long)
 				Juggle = false;
 				catches = 0;
 			}
